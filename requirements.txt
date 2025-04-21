@@ -1,0 +1,3 @@
+https://github.com/qwertyquerty/pypresence/archive/master.zip
+python-dotenv
+websockets
