@@ -46,6 +46,10 @@ async def safeClear():
 
 async def safeUpdate():
 	try:
+		link = current_song['link']
+		if not link or not link.startswith("http"):
+			link = "https://ostjourney.xyz/"
+
 		await rpc.update(
 			activity_type=ActivityType.LISTENING,
 			details=current_song['title'],
@@ -54,11 +58,12 @@ async def safeUpdate():
 			end=current_song['start_time'] + current_song['duration'],
 			large_image=current_song['image'],
 			large_text="OST Journey",
-			buttons=[{"label": "Listen", "url": current_song['link']}]
+			buttons=[{"label": "Listen", "url": link}]
 		)
 	except Exception as e:
 		print(f"RPC update failed: {e}. Attempting reconnect...")
 		await reconnectRpc()
+
 
 async def handler(websocket):
 	global current_song
@@ -68,49 +73,70 @@ async def handler(websocket):
 			payload = json.loads(message)
 			print("Received payload:", payload)
 
+			# Data extraction
 			paused = payload.get("paused")
 			title = payload.get("title")
 			artist = payload.get("artist")
-			image = payload.get("image")
+			image = payload.get("cover")
 			link = payload.get("link")
 			duration = payload.get("duration")
+			current_time = payload.get("currentTime")
 
+			# If image is a relative path, prepend the domain
 			if image and not image.startswith("http"):
 				image = IMG_DOMAIN + image
 
+			# Handle new song with optional currentTime
 			if title and artist and image and duration:
+				start_time = int(time.time())
+
+				if isinstance(current_time, (int, float)) and current_time >= 0:
+					start_time -= int(current_time)
+
 				current_song = {
 					"title": title,
 					"artist": artist,
 					"image": image,
 					"link": link,
 					"duration": duration,
-					"paused": False,
-					"start_time": int(time.time()),
+					"paused": paused if paused is not None else False,
+					"start_time": start_time,
 					"paused_time": None,
 				}
 
+				if current_song['paused']:
+					await safeClear()
+				else:
+					await safeUpdate()
+
+				continue
+
+			# Handle seek update only
+			if isinstance(current_time, (int, float)) and current_time >= 0:
+				current_song["start_time"] = int(time.time()) - int(current_time)
+				await safeUpdate()
+				continue
+
+			# Handle pause/resume
 			if paused is not None:
 				current_song['paused'] = paused
 				if paused:
 					current_song['paused_time'] = int(time.time())
 					await safeClear()
-					await websocket.send("paused")
 				else:
 					if current_song['paused_time'] is not None:
 						time_diff = int(time.time()) - current_song['paused_time']
 						current_song['start_time'] += time_diff
 						current_song['paused_time'] = None
 					await safeUpdate()
-					await websocket.send("updated")
-			else:
-				await websocket.send("invalid")
+				continue
+
 
 		except websockets.ConnectionClosed:
 			print("Client disconnected")
 			break
 		except Exception as e:
-			await websocket.send(f"error: {e}")
+			print(f"Error: {e}")
 
 async def main():
 	await reconnectRpc()

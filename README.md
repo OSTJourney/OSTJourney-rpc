@@ -61,7 +61,6 @@ Run the RPC client:
 python main.py
 ```
 Once running, the script will start pushing the currently playing track to your Discord Rich Presence (if the site is open and playing a song).
-**Warning** The script must be running before the website is loaded !
 
 ## **License**
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/OSTJourney/rpc/blob/main/LICENSE)
